@@ -4,7 +4,7 @@ Provides AI-powered diagnosis for Kubernetes incidents using Ollama.
 """
 import sys
 import os
-from typing import Dict, Optional
+from typing import Dict, Union
 
 # Add ai-engine to Python path for imports
 ai_engine_path = os.path.join(os.path.dirname(__file__), '../../../ai-engine')
@@ -15,136 +15,148 @@ from ollama_client import OllamaClient
 
 
 class AIService:
-    """
-    Service for AI-powered incident diagnosis.
-    Analyzes Kubernetes issues and provides root cause and fix suggestions.
-    """
-    
     def __init__(self):
-        """
-        Initialize AI service with Ollama client.
-        """
         self.ollama_client = OllamaClient(
             base_url="http://localhost:11434",
             model="llama3.1"
         )
-    
-    def build_diagnosis_prompt(self, issue: str) -> str:
-        """
-        Build a structured prompt for AI diagnosis.
-        
-        Args:
-            issue: Description of the Kubernetes issue
-        
-        Returns:
-            Formatted prompt for AI
-        """
-        prompt = f"""You are a Kubernetes expert.
-Analyze the issue and provide:
-1. Root cause
-2. Fix
 
-Issue: {issue}
+    # -------------------------------
+    # Prompt Builder (FIXED + IMPROVED)
+    # -------------------------------
+    def build_diagnosis_prompt(self, issue_context: Union[str, Dict[str, str]]) -> str:
+        if isinstance(issue_context, dict):
+            pod_name = issue_context.get('name', 'unknown')
+            namespace = issue_context.get('namespace', 'unknown')
+            error = issue_context.get('issue', 'unknown')
 
-Respond ONLY in this format:
-Cause: <root cause explanation>
-Fix: <step-by-step fix>"""
-        
-        return prompt
-    
+            context = f"""Pod: {pod_name}
+Namespace: {namespace}
+Error: {error}"""
+        else:
+            context = f"Issue: {issue_context}"
+
+        prompt = f"""You are a Kubernetes SRE.
+
+Analyze the issue using ONLY the given information.
+
+Issue details:
+{context}
+
+Rules:
+- DO NOT assume unknown details
+- DO NOT invent causes like database errors or config files
+- If information is insufficient, say "Insufficient data"
+- Be realistic and conservative
+- Keep answer short
+
+Respond ONLY:
+
+Cause: ...
+Fix: ...
+"""
+
+        return prompt  # 🔥 IMPORTANT FIX
+
+    # -------------------------------
+    # Safe Parsing
+    # -------------------------------
     def parse_ai_response(self, response: str) -> Dict[str, str]:
-        """
-        Parse AI response to extract cause and solution.
-        
-        Args:
-            response: Raw AI-generated text
-        
-        Returns:
-            Dictionary with 'cause' and 'solution' keys
-        """
-        # Default values if parsing fails
         cause = "Unknown"
         solution = "Manual investigation required"
-        
+
+        if not response or not response.strip():
+            return {"cause": cause, "solution": solution}
+
         try:
-            # Split response into lines
-            lines = response.strip().split('\n')
-            
-            # Extract cause and fix
-            for line in lines:
-                line = line.strip()
-                
-                # Look for "Cause:" line
-                if line.lower().startswith("cause:"):
-                    cause = line.split(":", 1)[1].strip()
-                
-                # Look for "Fix:" line
-                elif line.lower().startswith("fix:"):
-                    solution = line.split(":", 1)[1].strip()
-            
-            # Handle multi-line responses
-            if "cause:" in response.lower() and "fix:" in response.lower():
-                # Find positions
-                cause_start = response.lower().find("cause:")
-                fix_start = response.lower().find("fix:")
-                
-                if cause_start != -1 and fix_start != -1:
-                    # Extract cause (between "Cause:" and "Fix:")
+            response_lower = response.lower()
+
+            has_cause = "cause:" in response_lower
+            has_fix = "fix:" in response_lower
+
+            if has_cause and has_fix:
+                cause_start = response_lower.find("cause:")
+                fix_start = response_lower.find("fix:")
+
+                if cause_start != -1 and fix_start != -1 and fix_start > cause_start:
                     cause_text = response[cause_start + 6:fix_start].strip()
-                    if cause_text:
+                    cause_text = cause_text.replace('\n', ' ').replace('-', '').strip()
+
+                    if len(cause_text) > 3:
                         cause = cause_text
-                    
-                    # Extract fix (after "Fix:")
-                    fix_text = response[fix_start + 4:].strip()
-                    if fix_text:
-                        solution = fix_text
-        
+
+                fix_text = response[fix_start + 4:].strip()
+                fix_text = fix_text.replace('\n', ' ').replace('-', '').strip()
+
+                if len(fix_text) > 3:
+                    solution = fix_text
+
         except Exception as e:
             print(f"❌ Error parsing AI response: {e}")
-        
+
         return {
             "cause": cause,
             "solution": solution
         }
-    
-    def diagnose_issue(self, issue: str) -> Dict[str, str]:
-        """
-        Get AI-powered diagnosis for a Kubernetes issue.
-        
-        Args:
-            issue: Description of the Kubernetes issue
-        
-        Returns:
-            Dictionary with 'cause' and 'solution' keys
-        """
+
+    # -------------------------------
+    # Main Diagnosis Function
+    # -------------------------------
+    def diagnose_issue(self, issue_context: Union[str, Dict[str, str]]) -> Dict[str, str]:
         try:
-            print(f"🤖 Requesting AI diagnosis for: {issue}")
-            
-            # Build prompt
-            prompt = self.build_diagnosis_prompt(issue)
-            
-            # Call Ollama
-            response = self.ollama_client.generate(prompt)
-            
-            if response:
-                print(f"✅ AI response received")
-                
-                # Parse response
-                diagnosis = self.parse_ai_response(response)
-                
-                print(f"📋 Cause: {diagnosis['cause'][:50]}...")
-                print(f"🔧 Solution: {diagnosis['solution'][:50]}...")
-                
-                return diagnosis
+            # -------------------------------
+            # Rule-Based Accurate Detection (🔥 IMPORTANT)
+            # -------------------------------
+            if isinstance(issue_context, dict):
+                error = issue_context.get("issue", "")
+
+                if "CrashLoopBackOff" in error:
+                    return {
+                        "cause": "Container repeatedly crashes after startup (CrashLoopBackOff)",
+                        "solution": "Check container logs using kubectl logs and verify application startup or entrypoint"
+                    }
+
+                if "ImagePullBackOff" in error:
+                    return {
+                        "cause": "Kubernetes cannot pull container image",
+                        "solution": "Verify image name, registry access, and imagePullSecrets"
+                    }
+
+                if "restart" in error.lower():
+                    return {
+                        "cause": "Container is unstable and restarting frequently",
+                        "solution": "Check logs and resource limits (CPU/memory) and verify dependencies"
+                    }
+
+            # -------------------------------
+            # AI fallback (for unknown cases)
+            # -------------------------------
+            if isinstance(issue_context, dict):
+                log_msg = f"[{issue_context.get('namespace')}] {issue_context.get('name')} - {issue_context.get('issue')}"
             else:
-                print(f"❌ AI diagnosis failed - using defaults")
-                return {
-                    "cause": "Unknown - AI service unavailable",
-                    "solution": "Manual investigation required"
-                }
-        
+                log_msg = str(issue_context)
+
+            print(f"🤖 Requesting AI diagnosis for: {log_msg}")
+
+            prompt = self.build_diagnosis_prompt(issue_context)
+
+            response = self.ollama_client.generate(prompt, timeout=30)
+
+            if not response or len(response) < 10:
+                raise ValueError("Empty AI response")
+
+            print(f"✅ AI response received ({len(response)} chars)")
+
+            diagnosis = self.parse_ai_response(response)
+
+            print(f"📋 Cause: {diagnosis['cause'][:80]}")
+            print(f"🔧 Solution: {diagnosis['solution'][:80]}")
+
+            return diagnosis
+
         except Exception as e:
             print(f"❌ Error in AI diagnosis: {e}")
+
             return {
                 "cause": "Unknown - AI error",
                 "solution": "Manual investigation required"

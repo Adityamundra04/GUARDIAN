@@ -65,10 +65,11 @@ class MonitorService:
         # Create cleaner incident message format: [namespace] pod-name → issue
         incident_message = f"[{issue['namespace']}] {issue['name']} → {issue['issue']}"
         
-        # Get AI diagnosis for the issue
+        # Get AI diagnosis for the issue (pass full context for better diagnosis)
         diagnosis = {"cause": "Unknown", "solution": "Manual investigation required"}
         try:
-            diagnosis = self.ai_service.diagnose_issue(incident_message)
+            # Pass the full issue dict for better AI context
+            diagnosis = self.ai_service.diagnose_issue(issue)
         except Exception as e:
             print(f"❌ AI diagnosis failed: {e}")
         
