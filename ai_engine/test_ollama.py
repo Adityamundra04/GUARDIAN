@@ -2,8 +2,7 @@
 Test script for Ollama client.
 Verifies connection and basic functionality.
 """
-from ollama_client import OllamaClient
-
+from ai_engine.ollama_client import OllamaClient 
 
 def test_ollama_connection():
     """Test basic Ollama connection and generation."""
