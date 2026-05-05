@@ -1,0 +1,59 @@
+.kiro
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+
+venv/
+env/
+.venv/
+
+# Environment variables
+
+.env
+
+# Logs
+
+logs/
+*.log
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+
+.vscode/
+.idea/
+
+# Jupyter Notebook
+
+.ipynb_checkpoints/
+
+# Build files
+
+build/
+dist/
+*.egg-info/
+
+# OpenClaw runtime/cache (if any)
+
+.openclaw/
+
+# Temporary files
+
+*.tmp
+*.bak
+*.swp
+
+# Demo videos (optional - if large)
+
+demo/*.mp4
+
+# PPT (optional - if large)
+
+ppt/*.pptx
