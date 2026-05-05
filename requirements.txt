@@ -1,3 +1,22 @@
 psutil
 requests
 openclaw
+fastapi
+uvicorn[standard]
+
+pydantic
+python-dotenv
+
+requests
+
+# Kubernetes interaction
+kubernetes
+
+# Logging & utilities
+loguru
+
+# Optional (for async + performance later)
+httpx
+
+# AI integration (Ollama via API)
+aiohttp
