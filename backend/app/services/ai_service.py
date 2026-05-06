@@ -11,7 +11,7 @@ ai_engine_path = os.path.join(os.path.dirname(__file__), '../../../ai-engine')
 if ai_engine_path not in sys.path:
     sys.path.insert(0, ai_engine_path)
 
-from ollama_client import OllamaClient
+from ai_engine.ollama_client import OllamaClient
 
 
 class AIService:

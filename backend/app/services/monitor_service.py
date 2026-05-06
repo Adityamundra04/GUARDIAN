@@ -7,21 +7,25 @@ from backend.app.services.k8s_service import K8sService
 from backend.app.services.ai_service import AIService
 from backend.app.models.incident import Incident
 from backend.app.api.incidents import incidents_db
+from agent.executor import ActionExecutor
+from agent.safety_rules import SafetyRules
 
 
 class MonitorService:
     """
     Service for monitoring Kubernetes cluster and managing incidents.
     Detects issues and automatically creates incidents with AI-powered diagnosis.
+    Executes safe remediation actions automatically.
     """
     
     def __init__(self):
         """
         Initialize monitoring service.
-        Sets up Kubernetes service, AI service, and tracking for active issues.
+        Sets up Kubernetes service, AI service, action executor, and tracking for active issues.
         """
         self.k8s_service = K8sService()
         self.ai_service = AIService()
+        self.action_executor = ActionExecutor()
         
         # Track active issues to avoid duplicates
         # Format: "namespace/pod-name"
@@ -70,6 +74,7 @@ class MonitorService:
         try:
             # Pass the full issue dict for better AI context
             diagnosis = self.ai_service.diagnose_issue(issue)
+            print(f"🤖 AI diagnosis added to incident")
         except Exception as e:
             print(f"❌ AI diagnosis failed: {e}")
         
@@ -88,6 +93,57 @@ class MonitorService:
         self.active_issues.add(pod_identifier)
         
         print(f"✅ Incident created: {incident.id} - {incident.issue}")
+        
+        # Execute remediation action if safe
+        self.execute_remediation_action(issue)
+        
+        return incident
+    
+    def execute_remediation_action(self, issue: Dict[str, str]) -> None:
+        """
+        Execute safe remediation action for the detected issue.
+        
+        Args:
+            issue: Dictionary with name, namespace, and issue description
+        """
+        try:
+            # Decide what action to take
+            action = SafetyRules.decide_action(issue)
+            
+            if not action:
+                print(f"ℹ️  No automatic action for this issue")
+                return
+            
+            # Verify action is safe
+            if not SafetyRules.is_action_safe(action):
+                print(f"❌ Action blocked by safety rules")
+                return
+            
+            # Execute the action
+            action_type = action.get("type")
+            namespace = action.get("namespace")
+            pod_name = action.get("pod_name")
+            
+            result = None
+            
+            if action_type == "restart_pod":
+                result = self.action_executor.restart_pod(namespace, pod_name)
+            elif action_type == "delete_pod":
+                result = self.action_executor.delete_pod(namespace, pod_name)
+            elif action_type == "scale_deployment":
+                # Get deployment name and scale
+                deployment = self.action_executor.get_pod_owner(namespace, pod_name)
+                if deployment:
+                    result = self.action_executor.scale_deployment(namespace, deployment, 1)
+            
+            if result:
+                if result.get("status") == "success":
+                    print(f"✅ Remediation action completed: {result.get('message')}")
+                else:
+                    print(f"❌ Remediation action failed: {result.get('message')}")
+        
+        except Exception as e:
+            print(f"❌ Error executing remediation action: {e}")
         
         return incident
     
