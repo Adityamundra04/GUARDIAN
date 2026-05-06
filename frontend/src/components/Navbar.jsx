@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 
-const Navbar = ({ systemStatus }) => {
+const Navbar = ({ systemStatus, backendConnected = true }) => {
   return (
     <motion.nav
       initial={{ y: -100, opacity: 0 }}
@@ -13,8 +13,8 @@ const Navbar = ({ systemStatus }) => {
           {/* Logo and Title */}
           <div className="flex items-center space-x-4">
             <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              animate={{ rotate: backendConnected ? 360 : 0 }}
+              transition={{ duration: 20, repeat: backendConnected ? Infinity : 0, ease: "linear" }}
               className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyber-blue to-cyber-purple flex items-center justify-center"
             >
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,11 +37,16 @@ const Navbar = ({ systemStatus }) => {
           {/* Live Indicator */}
           <div className="flex items-center space-x-2">
             <motion.div
-              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="w-3 h-3 rounded-full bg-green-500"
+              animate={backendConnected ? { 
+                scale: [1, 1.2, 1], 
+                opacity: [1, 0.5, 1] 
+              } : {}}
+              transition={{ duration: 2, repeat: backendConnected ? Infinity : 0 }}
+              className={`w-3 h-3 rounded-full ${backendConnected ? 'bg-green-500' : 'bg-red-500'}`}
             />
-            <span className="text-sm font-medium text-green-400">LIVE</span>
+            <span className={`text-sm font-medium ${backendConnected ? 'text-green-400' : 'text-red-400'}`}>
+              {backendConnected ? 'LIVE' : 'OFFLINE'}
+            </span>
           </div>
         </div>
       </div>
