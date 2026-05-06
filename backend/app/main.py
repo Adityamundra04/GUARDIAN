@@ -6,6 +6,7 @@ Main FastAPI application entry point
 import threading
 import time
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.api import incidents
 from backend.app.services.monitor_service import MonitorService
@@ -25,6 +26,22 @@ app = FastAPI(
     title="Guardian",
     description="AI-powered Kubernetes incident assistant",
     version="1.0.0"
+)
+
+# -------------------------------
+# CORS Middleware
+# -------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",  # Vite default port
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include API routes
