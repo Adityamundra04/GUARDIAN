@@ -1,12 +1,12 @@
 import { motion } from 'framer-motion';
 
-const MonitoringPanel = ({ systemStatus }) => {
+const MonitoringPanel = ({ systemStatus, backendConnected = true }) => {
   return (
     <div className="glass rounded-xl p-6 border border-dark-border">
       <div className="flex items-center space-x-3 mb-6">
         <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+          animate={backendConnected ? { rotate: 360 } : {}}
+          transition={{ duration: 3, repeat: backendConnected ? Infinity : 0, ease: "linear" }}
           className="w-10 h-10 rounded-lg bg-gradient-to-br from-cyber-blue/20 to-cyber-purple/20 flex items-center justify-center border border-cyber-blue/30"
         >
           <svg className="w-6 h-6 text-cyber-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,15 +68,21 @@ const MonitoringPanel = ({ systemStatus }) => {
       {/* System Health Bar */}
       <div className="mt-6 pt-6 border-t border-dark-border">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-gray-400">System Health</span>
-          <span className="text-sm font-semibold text-green-400">98.5%</span>
+          <span className="text-sm text-gray-400">Backend Connection</span>
+          <span className={`text-sm font-semibold ${backendConnected ? 'text-green-400' : 'text-red-400'}`}>
+            {backendConnected ? 'Connected' : 'Disconnected'}
+          </span>
         </div>
         <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: '98.5%' }}
-            transition={{ duration: 1, delay: 0.5 }}
-            className="h-full bg-gradient-to-r from-green-500 to-cyber-blue rounded-full"
+            animate={{ width: backendConnected ? '100%' : '0%' }}
+            transition={{ duration: 1 }}
+            className={`h-full rounded-full ${
+              backendConnected 
+                ? 'bg-gradient-to-r from-green-500 to-cyber-blue' 
+                : 'bg-gradient-to-r from-red-500 to-red-700'
+            }`}
           />
         </div>
       </div>
