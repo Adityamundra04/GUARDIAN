@@ -5,6 +5,7 @@ Continuously monitors Kubernetes cluster and creates incidents automatically.
 from typing import Optional, Dict, Set, List
 from backend.app.services.k8s_service import K8sService
 from backend.app.services.ai_service import AIService
+from backend.app.services.prometheus_service import PrometheusService
 from backend.app.models.incident import Incident
 from backend.app.api.incidents import incidents_db
 from agent.executor import ActionExecutor
@@ -21,10 +22,11 @@ class MonitorService:
     def __init__(self):
         """
         Initialize monitoring service.
-        Sets up Kubernetes service, AI service, action executor, and tracking for active issues.
+        Sets up Kubernetes service, AI service, Prometheus service, action executor, and tracking for active issues.
         """
         self.k8s_service = K8sService()
         self.ai_service = AIService()
+        self.prometheus_service = PrometheusService()
         self.action_executor = ActionExecutor()
         
         # Track active issues to avoid duplicates
@@ -51,6 +53,7 @@ class MonitorService:
         Create an incident from a detected Kubernetes issue.
         Avoids creating duplicate incidents for the same pod.
         Uses AI to diagnose root cause and suggest fixes.
+        Enriches issue context with Prometheus metrics.
         
         Args:
             issue: Dictionary with name, namespace, and issue description
@@ -70,12 +73,15 @@ class MonitorService:
         
         print(f"[Monitor] Issue detected: {incident_message}")
         
-        # Get AI diagnosis for the issue (pass full context for better diagnosis)
+        # Enrich issue with Prometheus metrics
+        enriched_issue = self._enrich_issue_with_metrics(issue)
+        
+        # Get AI diagnosis for the issue (pass enriched context for better diagnosis)
         diagnosis = {"cause": "Unknown", "solution": "Manual investigation required"}
         try:
-            # Pass the full issue dict for better AI context
-            diagnosis = self.ai_service.diagnose_issue(issue)
-            print(f"[AI] Diagnosis completed")
+            # Pass the enriched issue dict with metrics for better AI context
+            diagnosis = self.ai_service.diagnose_issue(enriched_issue)
+            print(f"[AI] Metrics-aware diagnosis completed")
         except Exception as e:
             print(f"[AI] Diagnosis failed: {str(e)}")
         
@@ -163,6 +169,67 @@ class MonitorService:
             return None
         
         return None
+    
+    def _enrich_issue_with_metrics(self, issue: Dict[str, str]) -> Dict[str, str]:
+        """
+        Enrich issue context with Prometheus metrics.
+        Fetches CPU, memory, and restart count metrics for the problematic pod.
+        
+        Args:
+            issue: Dictionary with name, namespace, and issue description
+        
+        Returns:
+            Enriched issue dictionary with metrics
+        """
+        namespace = issue.get('namespace', '')
+        pod_name = issue.get('name', '')
+        
+        # Create enriched copy of issue
+        enriched_issue = issue.copy()
+        
+        # Initialize metrics with defaults
+        enriched_issue['cpu_usage'] = 'N/A'
+        enriched_issue['memory_mb'] = 'N/A'
+        enriched_issue['memory_bytes'] = 'N/A'
+        enriched_issue['restart_count'] = 'N/A'
+        
+        try:
+            # Fetch CPU metrics
+            cpu_metrics = self.prometheus_service.get_cpu_usage(
+                namespace=namespace,
+                pod=pod_name
+            )
+            if cpu_metrics and len(cpu_metrics) > 0:
+                enriched_issue['cpu_usage'] = f"{cpu_metrics[0]['cpu_usage']:.4f} cores"
+                print(f"[Prometheus] CPU usage: {enriched_issue['cpu_usage']}")
+            
+            # Fetch memory metrics
+            memory_metrics = self.prometheus_service.get_memory_usage(
+                namespace=namespace,
+                pod=pod_name
+            )
+            if memory_metrics and len(memory_metrics) > 0:
+                enriched_issue['memory_mb'] = f"{memory_metrics[0]['memory_mb']} MB"
+                enriched_issue['memory_bytes'] = memory_metrics[0]['memory_bytes']
+                print(f"[Prometheus] Memory usage: {enriched_issue['memory_mb']}")
+            
+            # Fetch restart count
+            restart_metrics = self.prometheus_service.get_pod_restart_count(
+                namespace=namespace,
+                pod=pod_name
+            )
+            if restart_metrics and len(restart_metrics) > 0:
+                enriched_issue['restart_count'] = restart_metrics[0]['restart_count']
+                print(f"[Prometheus] Restart count: {enriched_issue['restart_count']}")
+            
+            print(f"[Prometheus] Metrics attached to AI context")
+        
+        except Exception as e:
+            # Safe fallback: continue with default metrics if Prometheus fails
+            print(f"[Prometheus] Failed to fetch metrics: {str(e)}")
+            print(f"[Prometheus] Continuing with default metrics")
+        
+        return enriched_issue
     
     def remove_resolved_issues(self, current_issues: List[Dict[str, str]]) -> None:
         """
