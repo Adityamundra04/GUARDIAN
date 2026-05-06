@@ -7,7 +7,8 @@ from backend.app.services.k8s_service import K8sService
 from backend.app.services.ai_service import AIService
 from backend.app.services.prometheus_service import PrometheusService
 from backend.app.models.incident import Incident
-from backend.app.api.incidents import incidents_db
+from backend.app.models.incident_db import IncidentDB
+from backend.app.core.database import get_db_session
 from agent.executor import ActionExecutor
 from agent.safety_rules import SafetyRules
 from backend.app.core.logger import get_monitor_logger
@@ -89,7 +90,7 @@ class MonitorService:
         except Exception as e:
             logger.error(f"AI diagnosis failed: {str(e)}", exc_info=True)
         
-        # Create incident with AI-enriched data
+        # Create Pydantic incident model
         incident = Incident(
             issue=incident_message,
             status="detected",
@@ -99,8 +100,30 @@ class MonitorService:
             action_status=None
         )
         
-        # Add to in-memory database
-        incidents_db.append(incident)
+        # Save to database
+        try:
+            db = get_db_session()
+            try:
+                db_incident = IncidentDB(
+                    id=incident.id,
+                    issue=incident.issue,
+                    status=incident.status,
+                    cause=incident.cause,
+                    solution=incident.solution,
+                    action_taken=incident.action_taken,
+                    action_status=incident.action_status
+                )
+                
+                db.add(db_incident)
+                db.commit()
+                db.refresh(db_incident)
+                
+                logger.info(f"Incident saved to database: {incident.id}")
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Failed to save incident to database: {e}", exc_info=True)
+            # Continue anyway - incident is still tracked in memory
         
         # Track this issue as active
         self.active_issues.add(pod_identifier)
@@ -114,6 +137,21 @@ class MonitorService:
         if action_result:
             incident.action_taken = action_result.get("action", "none")
             incident.action_status = action_result.get("status", "none")
+            
+            # Update database with action result
+            try:
+                db = get_db_session()
+                try:
+                    db_incident = db.query(IncidentDB).filter(IncidentDB.id == incident.id).first()
+                    if db_incident:
+                        db_incident.action_taken = incident.action_taken
+                        db_incident.action_status = incident.action_status
+                        db.commit()
+                        logger.info(f"Incident updated with action result: {incident.id}")
+                finally:
+                    db.close()
+            except Exception as e:
+                logger.error(f"Failed to update incident in database: {e}", exc_info=True)
         
         return incident
     

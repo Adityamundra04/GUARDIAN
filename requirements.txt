@@ -20,3 +20,6 @@ httpx
 
 # AI integration (Ollama via API)
 aiohttp
+
+# Database
+sqlalchemy

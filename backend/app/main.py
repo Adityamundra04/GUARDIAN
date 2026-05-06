@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from backend.app.api import incidents
 from backend.app.services.monitor_service import MonitorService
 from backend.app.core.logger import setup_root_logger, get_logger
+from backend.app.core.database import init_database
 
 # -------------------------------
 # Logging setup
@@ -69,6 +70,13 @@ def startup_event():
     monitoring_started = True
 
     logger.info("Starting Guardian application...")
+    
+    # Initialize database
+    try:
+        init_database()
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}", exc_info=True)
+        # Continue anyway - monitoring can still work
 
     # Start monitoring thread
     monitoring_thread = threading.Thread(
