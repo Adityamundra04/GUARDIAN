@@ -63,27 +63,30 @@ class MonitorService:
         
         # Check if we already have an active incident for this pod
         if pod_identifier in self.active_issues:
-            print(f"⏭️  Skipping duplicate incident for {pod_identifier}")
             return None
         
         # Create cleaner incident message format: [namespace] pod-name → issue
         incident_message = f"[{issue['namespace']}] {issue['name']} → {issue['issue']}"
+        
+        print(f"[Monitor] Issue detected: {incident_message}")
         
         # Get AI diagnosis for the issue (pass full context for better diagnosis)
         diagnosis = {"cause": "Unknown", "solution": "Manual investigation required"}
         try:
             # Pass the full issue dict for better AI context
             diagnosis = self.ai_service.diagnose_issue(issue)
-            print(f"🤖 AI diagnosis added to incident")
+            print(f"[AI] Diagnosis completed")
         except Exception as e:
-            print(f"❌ AI diagnosis failed: {e}")
+            print(f"[AI] Diagnosis failed: {str(e)}")
         
         # Create incident with AI-enriched data
         incident = Incident(
             issue=incident_message,
             status="detected",
             cause=diagnosis.get("cause", "Unknown"),
-            solution=diagnosis.get("solution", "Manual investigation required")
+            solution=diagnosis.get("solution", "Manual investigation required"),
+            action_taken=None,
+            action_status=None
         )
         
         # Add to in-memory database
@@ -92,37 +95,45 @@ class MonitorService:
         # Track this issue as active
         self.active_issues.add(pod_identifier)
         
-        print(f"✅ Incident created: {incident.id} - {incident.issue}")
+        print(f"[Monitor] Incident created: {incident.id}")
         
         # Execute remediation action if safe
-        self.execute_remediation_action(issue)
+        action_result = self.execute_remediation_action(issue, incident)
+        
+        # Update incident with action result
+        if action_result:
+            incident.action_taken = action_result.get("action", "none")
+            incident.action_status = action_result.get("status", "none")
         
         return incident
     
-    def execute_remediation_action(self, issue: Dict[str, str]) -> None:
+    def execute_remediation_action(self, issue: Dict[str, str], incident: Incident) -> Optional[Dict[str, str]]:
         """
         Execute safe remediation action for the detected issue.
         
         Args:
             issue: Dictionary with name, namespace, and issue description
+            incident: The incident object to update
+        
+        Returns:
+            Action result dictionary or None
         """
         try:
             # Decide what action to take
             action = SafetyRules.decide_action(issue)
             
             if not action:
-                print(f"ℹ️  No automatic action for this issue")
-                return
+                return None
             
             # Verify action is safe
             if not SafetyRules.is_action_safe(action):
-                print(f"❌ Action blocked by safety rules")
-                return
+                return None
             
             # Execute the action
             action_type = action.get("type")
             namespace = action.get("namespace")
             pod_name = action.get("pod_name")
+            pod_identifier = f"{namespace}/{pod_name}"
             
             result = None
             
@@ -137,15 +148,21 @@ class MonitorService:
                     result = self.action_executor.scale_deployment(namespace, deployment, 1)
             
             if result:
+                # Record action for retry tracking
+                SafetyRules.record_action(pod_identifier)
+                
                 if result.get("status") == "success":
-                    print(f"✅ Remediation action completed: {result.get('message')}")
+                    print(f"[OpenClaw] Action completed successfully")
                 else:
-                    print(f"❌ Remediation action failed: {result.get('message')}")
+                    print(f"[OpenClaw] Action failed: {result.get('message')}")
+                
+                return result
         
         except Exception as e:
-            print(f"❌ Error executing remediation action: {e}")
+            print(f"[OpenClaw] Error executing action: {str(e)}")
+            return None
         
-        return incident
+        return None
     
     def remove_resolved_issues(self, current_issues: List[Dict[str, str]]) -> None:
         """
@@ -168,7 +185,9 @@ class MonitorService:
         if resolved_issues:
             for resolved in resolved_issues:
                 self.active_issues.discard(resolved)
-                print(f"🔄 Resolved issue removed from tracking: {resolved}")
+                # Reset retry tracker for resolved issues
+                SafetyRules.reset_tracker(resolved)
+                print(f"[Monitor] Issue resolved: {resolved}")
     
     def monitor_and_create_incidents(self) -> None:
         """
@@ -190,26 +209,20 @@ class MonitorService:
             
             # Handle each detected issue
             if issues:
-                print(f"🔍 Found {len(issues)} issue(s) in cluster")
+                print(f"[Monitor] Found {len(issues)} issue(s) in cluster")
                 
                 for issue in issues:
                     try:
-                        # Log detection
-                        print(f"⚠️  Issue detected: [{issue['namespace']}] {issue['name']} - {issue['issue']}")
-                        
                         # Create incident (will skip if duplicate)
                         self.create_incident_from_issue(issue)
                         
                     except Exception as e:
                         # Log error but continue processing other issues
-                        print(f"❌ Error creating incident for {issue.get('name', 'unknown')}: {e}")
-            else:
-                # No issues detected - system healthy
-                pass
+                        print(f"[Monitor] Error processing {issue.get('name', 'unknown')}: {str(e)}")
                 
         except Exception as e:
             # Catch all errors to prevent monitoring loop from crashing
-            print(f"❌ Error in monitoring loop: {e}")
+            print(f"[Monitor] Error in monitoring loop: {str(e)}")
     
     def clear_resolved_issues(self) -> None:
         """

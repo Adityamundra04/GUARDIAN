@@ -17,12 +17,16 @@ class Incident(BaseModel):
         status: Current status (default: "detected")
         cause: Root cause analysis (optional)
         solution: Proposed or applied solution (optional)
+        action_taken: Action executed for remediation (optional)
+        action_status: Status of the action (optional)
     """
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     issue: str
     status: str = "detected"
     cause: Optional[str] = None
     solution: Optional[str] = None
+    action_taken: Optional[str] = None
+    action_status: Optional[str] = None
 
 
 class IncidentCreate(BaseModel):
@@ -34,3 +38,5 @@ class IncidentCreate(BaseModel):
     status: Optional[str] = "detected"
     cause: Optional[str] = None
     solution: Optional[str] = None
+    action_taken: Optional[str] = None
+    action_status: Optional[str] = None

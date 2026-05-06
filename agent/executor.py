@@ -36,7 +36,7 @@ class ActionExecutor:
             Dictionary with status and message
         """
         try:
-            print(f"🔄 Executing action: restart pod {pod_name} in namespace {namespace}")
+            print(f"[OpenClaw] Executing action: restart pod {pod_name}")
             
             # Delete the pod (it will be recreated by the controller)
             self.core_v1.delete_namespaced_pod(
@@ -45,26 +45,29 @@ class ActionExecutor:
                 body=client.V1DeleteOptions()
             )
             
-            print(f"✅ Pod {pod_name} deleted successfully (will be recreated)")
+            print(f"[OpenClaw] Restart successful: {pod_name}")
             
             return {
                 "status": "success",
-                "message": f"Pod {pod_name} restarted successfully"
+                "message": f"Pod {pod_name} restarted successfully",
+                "action": "restart_pod"
             }
         
         except client.exceptions.ApiException as e:
-            error_msg = f"Failed to restart pod {pod_name}: {e.reason}"
-            print(f"❌ {error_msg}")
+            error_msg = f"Failed to restart pod: {e.reason}"
+            print(f"[OpenClaw] Restart failed: {error_msg}")
             return {
                 "status": "error",
-                "message": error_msg
+                "message": error_msg,
+                "action": "restart_pod"
             }
         except Exception as e:
-            error_msg = f"Unexpected error restarting pod {pod_name}: {str(e)}"
-            print(f"❌ {error_msg}")
+            error_msg = f"Unexpected error: {str(e)}"
+            print(f"[OpenClaw] Restart failed: {error_msg}")
             return {
                 "status": "error",
-                "message": error_msg
+                "message": error_msg,
+                "action": "restart_pod"
             }
     
     def delete_pod(self, namespace: str, pod_name: str) -> Dict[str, str]:
@@ -79,7 +82,7 @@ class ActionExecutor:
             Dictionary with status and message
         """
         try:
-            print(f"🗑️  Executing action: delete pod {pod_name} in namespace {namespace}")
+            print(f"[OpenClaw] Executing action: delete pod {pod_name}")
             
             # Delete the pod
             self.core_v1.delete_namespaced_pod(
@@ -88,26 +91,29 @@ class ActionExecutor:
                 body=client.V1DeleteOptions()
             )
             
-            print(f"✅ Pod {pod_name} deleted successfully")
+            print(f"[OpenClaw] Delete successful: {pod_name}")
             
             return {
                 "status": "success",
-                "message": f"Pod {pod_name} deleted successfully"
+                "message": f"Pod {pod_name} deleted successfully",
+                "action": "delete_pod"
             }
         
         except client.exceptions.ApiException as e:
-            error_msg = f"Failed to delete pod {pod_name}: {e.reason}"
-            print(f"❌ {error_msg}")
+            error_msg = f"Failed to delete pod: {e.reason}"
+            print(f"[OpenClaw] Delete failed: {error_msg}")
             return {
                 "status": "error",
-                "message": error_msg
+                "message": error_msg,
+                "action": "delete_pod"
             }
         except Exception as e:
-            error_msg = f"Unexpected error deleting pod {pod_name}: {str(e)}"
-            print(f"❌ {error_msg}")
+            error_msg = f"Unexpected error: {str(e)}"
+            print(f"[OpenClaw] Delete failed: {error_msg}")
             return {
                 "status": "error",
-                "message": error_msg
+                "message": error_msg,
+                "action": "delete_pod"
             }
     
     def scale_deployment(self, namespace: str, deployment_name: str, replicas: int) -> Dict[str, str]:
