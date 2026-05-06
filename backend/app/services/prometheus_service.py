@@ -5,6 +5,10 @@ Fetches Kubernetes metrics from Prometheus for AI-powered analysis.
 import requests
 from typing import Dict, List, Optional, Any
 from datetime import datetime
+from backend.app.core.logger import get_prometheus_logger
+
+# Initialize logger
+logger = get_prometheus_logger()
 
 
 class PrometheusService:
@@ -35,7 +39,7 @@ class PrometheusService:
             Query result as dictionary, or None if error
         """
         try:
-            print(f"[Prometheus] Executing query: {query}")
+            logger.debug(f"Executing query: {query}")
             
             response = requests.get(
                 self.query_url,
@@ -47,23 +51,23 @@ class PrometheusService:
                 data = response.json()
                 
                 if data.get('status') == 'success':
-                    print(f"[Prometheus] Query successful")
+                    logger.debug("Query successful")
                     return data.get('data', {})
                 else:
-                    print(f"[Prometheus] Query failed: {data.get('error', 'Unknown error')}")
+                    logger.warning(f"Query failed: {data.get('error', 'Unknown error')}")
                     return None
             else:
-                print(f"[Prometheus] HTTP error: {response.status_code}")
+                logger.error(f"HTTP error: {response.status_code}")
                 return None
         
         except requests.exceptions.Timeout:
-            print(f"[Prometheus] Query timeout after {self.timeout} seconds")
+            logger.warning(f"Query timeout after {self.timeout} seconds")
             return None
         except requests.exceptions.ConnectionError:
-            print(f"[Prometheus] Failed to connect to {self.base_url}")
+            logger.error(f"Failed to connect to {self.base_url}")
             return None
         except Exception as e:
-            print(f"[Prometheus] Error executing query: {str(e)}")
+            logger.error(f"Error executing query: {str(e)}")
             return None
     
     def get_cpu_usage(self, namespace: Optional[str] = None, pod: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -77,7 +81,7 @@ class PrometheusService:
         Returns:
             List of CPU usage metrics
         """
-        print(f"[Prometheus] Fetching CPU metrics")
+        logger.debug("Fetching CPU metrics")
         
         # Build query with optional filters
         query = 'rate(container_cpu_usage_seconds_total{container!=""}[5m])'
@@ -106,7 +110,7 @@ class PrometheusService:
                 'timestamp': value[0] if len(value) > 0 else None
             })
         
-        print(f"[Prometheus] Retrieved {len(metrics)} CPU metrics")
+        logger.debug(f"Retrieved {len(metrics)} CPU metrics")
         return metrics
     
     def get_memory_usage(self, namespace: Optional[str] = None, pod: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -120,7 +124,7 @@ class PrometheusService:
         Returns:
             List of memory usage metrics
         """
-        print(f"[Prometheus] Fetching memory metrics")
+        logger.debug("Fetching memory metrics")
         
         # Build query with optional filters
         query = 'container_memory_usage_bytes{container!=""}'
@@ -153,7 +157,7 @@ class PrometheusService:
                 'timestamp': value[0] if len(value) > 0 else None
             })
         
-        print(f"[Prometheus] Retrieved {len(metrics)} memory metrics")
+        logger.debug(f"Retrieved {len(metrics)} memory metrics")
         return metrics
     
     def get_pod_restart_count(self, namespace: Optional[str] = None, pod: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -167,7 +171,7 @@ class PrometheusService:
         Returns:
             List of restart count metrics
         """
-        print(f"[Prometheus] Fetching pod restart counts")
+        logger.debug("Fetching pod restart counts")
         
         # Build query with optional filters
         query = 'kube_pod_container_status_restarts_total'
@@ -198,7 +202,7 @@ class PrometheusService:
                 'timestamp': value[0] if len(value) > 0 else None
             })
         
-        print(f"[Prometheus] Retrieved {len(metrics)} restart count metrics")
+        logger.debug(f"Retrieved {len(metrics)} restart count metrics")
         return metrics
     
     def get_pod_status(self, namespace: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -211,7 +215,7 @@ class PrometheusService:
         Returns:
             List of pod status metrics
         """
-        print(f"[Prometheus] Fetching pod status")
+        logger.debug("Fetching pod status")
         
         # Build query with optional filters
         query = 'kube_pod_status_phase'
@@ -240,7 +244,7 @@ class PrometheusService:
                 'timestamp': value[0] if len(value) > 0 else None
             })
         
-        print(f"[Prometheus] Retrieved {len(metrics)} pod status metrics")
+        logger.debug(f"Retrieved {len(metrics)} pod status metrics")
         return metrics
     
     def get_container_memory_limit(self, namespace: Optional[str] = None, pod: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -254,7 +258,7 @@ class PrometheusService:
         Returns:
             List of memory limit metrics
         """
-        print(f"[Prometheus] Fetching memory limits")
+        logger.debug("Fetching memory limits")
         
         # Build query with optional filters
         query = 'container_spec_memory_limit_bytes{container!=""}'
@@ -287,7 +291,7 @@ class PrometheusService:
                 'timestamp': value[0] if len(value) > 0 else None
             })
         
-        print(f"[Prometheus] Retrieved {len(metrics)} memory limit metrics")
+        logger.debug(f"Retrieved {len(metrics)} memory limit metrics")
         return metrics
     
     def check_connection(self) -> bool:
@@ -298,7 +302,7 @@ class PrometheusService:
             True if connected, False otherwise
         """
         try:
-            print(f"[Prometheus] Checking connection to {self.base_url}")
+            logger.info(f"Checking connection to {self.base_url}")
             
             response = requests.get(
                 f"{self.base_url}/api/v1/status/config",
@@ -306,12 +310,12 @@ class PrometheusService:
             )
             
             if response.status_code == 200:
-                print(f"[Prometheus] Connection successful")
+                logger.info("Connection successful")
                 return True
             else:
-                print(f"[Prometheus] Connection failed: HTTP {response.status_code}")
+                logger.error(f"Connection failed: HTTP {response.status_code}")
                 return False
         
         except Exception as e:
-            print(f"[Prometheus] Connection failed: {str(e)}")
+            logger.error(f"Connection failed: {str(e)}")
             return False

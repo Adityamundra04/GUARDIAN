@@ -4,6 +4,10 @@ Monitors Kubernetes cluster and detects problematic pods.
 """
 from kubernetes import client, config
 from typing import List, Dict, Optional
+from backend.app.core.logger import get_k8s_logger
+
+# Initialize logger
+logger = get_k8s_logger()
 
 
 class K8sService:
@@ -117,3 +121,46 @@ class K8sService:
                         })
         
         return problematic_pods
+    
+    def get_pod_logs(self, namespace: str, pod_name: str, tail_lines: int = 50) -> str:
+        """
+        Fetch recent logs from a pod's container.
+        
+        Args:
+            namespace: Kubernetes namespace
+            pod_name: Name of the pod
+            tail_lines: Number of recent log lines to fetch (default: 50)
+        
+        Returns:
+            String containing recent pod logs, or empty string if unavailable
+        """
+        try:
+            logger.info(f"Fetching logs for pod {pod_name} in namespace {namespace}")
+            
+            # Fetch pod logs (last N lines)
+            logs = self.v1.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                tail_lines=tail_lines,
+                timestamps=False
+            )
+            
+            if logs:
+                # Truncate if too long (safety measure)
+                max_chars = 2000  # Limit to 2000 characters
+                if len(logs) > max_chars:
+                    logs = logs[-max_chars:]
+                    logs = "...(truncated)\n" + logs
+                
+                logger.info(f"Logs retrieved successfully ({len(logs)} chars)")
+                return logs
+            else:
+                logger.info(f"No logs available for pod {pod_name}")
+                return ""
+        
+        except client.exceptions.ApiException as e:
+            logger.warning(f"Failed to fetch logs for {pod_name}: API error {e.status}")
+            return ""
+        except Exception as e:
+            logger.warning(f"Failed to fetch logs for {pod_name}: {str(e)}")
+            return ""

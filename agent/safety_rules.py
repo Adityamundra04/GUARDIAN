@@ -4,6 +4,13 @@ Defines which actions are safe to execute for different issue types.
 """
 from typing import Optional, Dict
 import time
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from backend.app.core.logger import get_safety_logger
+
+# Initialize logger
+logger = get_safety_logger()
 
 
 class SafetyRules:
@@ -63,17 +70,17 @@ class SafetyRules:
         
         # Check if namespace is allowed for auto-execution
         if namespace not in SafetyRules.ALLOWED_NAMESPACES:
-            print(f"[Safety] Auto-execution disabled for namespace: {namespace}")
+            logger.info(f" Auto-execution disabled for namespace: {namespace}")
             return None
         
         # Check retry limit
         if not SafetyRules._check_retry_limit(pod_identifier):
-            print(f"[Safety] Retry limit reached for {pod_name} - skipping action")
+            logger.info(f" Retry limit reached for {pod_name} - skipping action")
             return None
         
         # Check cooldown
         if not SafetyRules._check_cooldown(pod_identifier):
-            print(f"[Safety] Cooldown active for {pod_name} - skipping action")
+            logger.info(f" Cooldown active for {pod_name} - skipping action")
             return None
         
         # Find matching action for issue type
@@ -84,12 +91,12 @@ class SafetyRules:
                 break
         
         if not action_type:
-            print(f"[Safety] No safe action defined for issue: {issue_type}")
+            logger.info(f" No safe action defined for issue: {issue_type}")
             return None
         
         # Check if action requires manual approval
         if action_type in SafetyRules.MANUAL_APPROVAL_REQUIRED:
-            print(f"[Safety] Action {action_type} requires manual approval")
+            logger.info(f" Action {action_type} requires manual approval")
             return None
         
         # Return action details
@@ -100,7 +107,7 @@ class SafetyRules:
             "issue_type": issue_type
         }
         
-        print(f"[Safety] Safe action decided: {action_type} for pod {pod_name}")
+        logger.info(f" Safe action decided: {action_type} for pod {pod_name}")
         
         return action
     
@@ -154,7 +161,7 @@ class SafetyRules:
         SafetyRules._retry_tracker[pod_identifier]["last_action"] = time.time()
         
         attempts = SafetyRules._retry_tracker[pod_identifier]["attempts"]
-        print(f"[Safety] Action recorded for {pod_identifier} (attempt {attempts}/{SafetyRules.MAX_RETRY_ATTEMPTS})")
+        logger.info(f" Action recorded for {pod_identifier} (attempt {attempts}/{SafetyRules.MAX_RETRY_ATTEMPTS})")
     
     @staticmethod
     def reset_tracker(pod_identifier: str) -> None:
@@ -166,7 +173,7 @@ class SafetyRules:
         """
         if pod_identifier in SafetyRules._retry_tracker:
             del SafetyRules._retry_tracker[pod_identifier]
-            print(f"[Safety] Retry tracker reset for {pod_identifier}")
+            logger.info(f" Retry tracker reset for {pod_identifier}")
     
     @staticmethod
     def is_action_safe(action: Dict[str, str]) -> bool:
@@ -184,17 +191,17 @@ class SafetyRules:
         
         # Check namespace
         if namespace not in SafetyRules.ALLOWED_NAMESPACES:
-            print(f"[Safety] Action blocked: namespace {namespace} not in allowed list")
+            logger.info(f" Action blocked: namespace {namespace} not in allowed list")
             return False
         
         # Check if action is in safe list
         if action_type not in SafetyRules.SAFE_ACTIONS.values():
-            print(f"[Safety] Action blocked: {action_type} not in safe actions list")
+            logger.info(f" Action blocked: {action_type} not in safe actions list")
             return False
         
         # Check if action requires manual approval
         if action_type in SafetyRules.MANUAL_APPROVAL_REQUIRED:
-            print(f"[Safety] Action blocked: {action_type} requires manual approval")
+            logger.info(f" Action blocked: {action_type} requires manual approval")
             return False
         
         return True

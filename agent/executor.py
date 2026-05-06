@@ -3,6 +3,13 @@ Action executor for Guardian.
 Executes safe Kubernetes actions to fix detected issues.
 """
 from kubernetes import client, config
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from backend.app.core.logger import get_action_logger
+
+# Initialize logger
+logger = get_action_logger()
 from typing import Optional, Dict
 import time
 
@@ -36,7 +43,7 @@ class ActionExecutor:
             Dictionary with status and message
         """
         try:
-            print(f"[OpenClaw] Executing action: restart pod {pod_name}")
+            logger.info(f" Executing action: restart pod {pod_name}")
             
             # Delete the pod (it will be recreated by the controller)
             self.core_v1.delete_namespaced_pod(
@@ -45,7 +52,7 @@ class ActionExecutor:
                 body=client.V1DeleteOptions()
             )
             
-            print(f"[OpenClaw] Restart successful: {pod_name}")
+            logger.info(f" Restart successful: {pod_name}")
             
             return {
                 "status": "success",
@@ -55,7 +62,7 @@ class ActionExecutor:
         
         except client.exceptions.ApiException as e:
             error_msg = f"Failed to restart pod: {e.reason}"
-            print(f"[OpenClaw] Restart failed: {error_msg}")
+            logger.info(f" Restart failed: {error_msg}")
             return {
                 "status": "error",
                 "message": error_msg,
@@ -63,7 +70,7 @@ class ActionExecutor:
             }
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
-            print(f"[OpenClaw] Restart failed: {error_msg}")
+            logger.info(f" Restart failed: {error_msg}")
             return {
                 "status": "error",
                 "message": error_msg,
@@ -82,7 +89,7 @@ class ActionExecutor:
             Dictionary with status and message
         """
         try:
-            print(f"[OpenClaw] Executing action: delete pod {pod_name}")
+            logger.info(f" Executing action: delete pod {pod_name}")
             
             # Delete the pod
             self.core_v1.delete_namespaced_pod(
@@ -91,7 +98,7 @@ class ActionExecutor:
                 body=client.V1DeleteOptions()
             )
             
-            print(f"[OpenClaw] Delete successful: {pod_name}")
+            logger.info(f" Delete successful: {pod_name}")
             
             return {
                 "status": "success",
@@ -101,7 +108,7 @@ class ActionExecutor:
         
         except client.exceptions.ApiException as e:
             error_msg = f"Failed to delete pod: {e.reason}"
-            print(f"[OpenClaw] Delete failed: {error_msg}")
+            logger.info(f" Delete failed: {error_msg}")
             return {
                 "status": "error",
                 "message": error_msg,
@@ -109,7 +116,7 @@ class ActionExecutor:
             }
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
-            print(f"[OpenClaw] Delete failed: {error_msg}")
+            logger.info(f" Delete failed: {error_msg}")
             return {
                 "status": "error",
                 "message": error_msg,

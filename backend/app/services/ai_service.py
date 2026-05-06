@@ -5,6 +5,10 @@ Provides AI-powered diagnosis for Kubernetes incidents using Ollama.
 import sys
 import os
 from typing import Dict, Union
+from backend.app.core.logger import get_ai_logger
+
+# Initialize logger
+logger = get_ai_logger()
 
 # Add ai-engine to Python path for imports
 ai_engine_path = os.path.join(os.path.dirname(__file__), '../../../ai-engine')
@@ -22,7 +26,7 @@ class AIService:
         )
 
     # -------------------------------
-    # Prompt Builder (FIXED + IMPROVED + METRICS-AWARE)
+    # Prompt Builder (METRICS + LOGS AWARE)
     # -------------------------------
     def build_diagnosis_prompt(self, issue_context: Union[str, Dict[str, str]]) -> str:
         if isinstance(issue_context, dict):
@@ -34,28 +38,45 @@ class AIService:
             cpu_usage = issue_context.get('cpu_usage', 'N/A')
             memory_mb = issue_context.get('memory_mb', 'N/A')
             restart_count = issue_context.get('restart_count', 'N/A')
-
+            
+            # Extract logs if available
+            logs = issue_context.get('logs', '')
+            
+            # Build context with metrics
             context = f"""Pod: {pod_name}
 Namespace: {namespace}
 Error: {error}
 CPU Usage: {cpu_usage}
 Memory Usage: {memory_mb}
 Restart Count: {restart_count}"""
+            
+            # Add logs if available
+            if logs and logs.strip():
+                # Truncate logs if too long
+                max_log_chars = 1500
+                if len(logs) > max_log_chars:
+                    logs = logs[-max_log_chars:]
+                    logs = "...(truncated)\n" + logs
+                
+                context += f"\n\nRecent Container Logs:\n{logs}"
         else:
             context = f"Issue: {issue_context}"
 
         prompt = f"""You are a Kubernetes SRE with expertise in diagnosing production issues.
 
-Analyze the issue using the provided information including metrics.
+Analyze the issue using the provided information including metrics and logs.
 
 Issue details:
 {context}
 
 Analysis Guidelines:
+- PRIORITIZE log analysis - stack traces, errors, and exceptions are the most reliable indicators
+- If logs contain error messages, stack traces, or missing dependencies, use those as primary evidence
 - High CPU usage (>0.5 cores) may indicate CPU-intensive workload or runaway process
 - High memory usage (>80% of limit) may indicate memory leak or OOM condition
 - High restart count (>3) indicates unstable workload or configuration issue
 - CrashLoopBackOff with high restarts suggests persistent startup failure
+- Look for patterns in logs: connection errors, missing files, permission issues, dependency failures
 - Consider metrics when determining root cause
 - DO NOT assume unknown details
 - If information is insufficient, say "Insufficient data"
@@ -64,8 +85,8 @@ Analysis Guidelines:
 
 Respond ONLY:
 
-Cause: ...
-Fix: ...
+Cause: <specific cause>
+Fix: <specific fix>
 """
 
         return prompt
@@ -104,7 +125,7 @@ Fix: ...
                     solution = fix_text
 
         except Exception as e:
-            print(f"❌ Error parsing AI response: {e}")
+            logger.error(f"Error parsing AI response: {e}")
 
         return {
             "cause": cause,
@@ -112,18 +133,19 @@ Fix: ...
         }
 
     # -------------------------------
-    # Main Diagnosis Function (METRICS-AWARE)
+    # Main Diagnosis Function (METRICS + LOGS AWARE)
     # -------------------------------
     def diagnose_issue(self, issue_context: Union[str, Dict[str, str]]) -> Dict[str, str]:
         try:
             # -------------------------------
             # Rule-Based Accurate Detection (🔥 IMPORTANT)
-            # Enhanced with metrics awareness
+            # Enhanced with metrics and logs awareness
             # -------------------------------
             if isinstance(issue_context, dict):
                 error = issue_context.get("issue", "")
                 restart_count = issue_context.get("restart_count", "N/A")
                 memory_mb = issue_context.get("memory_mb", "N/A")
+                logs = issue_context.get("logs", "")
 
                 if "CrashLoopBackOff" in error:
                     # Enhanced diagnosis with restart count
@@ -156,14 +178,17 @@ Fix: ...
                     }
 
             # -------------------------------
-            # AI fallback (for unknown cases) - now metrics-aware
+            # AI fallback (for unknown cases) - now metrics + logs aware
             # -------------------------------
             if isinstance(issue_context, dict):
                 log_msg = f"[{issue_context.get('namespace')}] {issue_context.get('name')} - {issue_context.get('issue')}"
+                has_logs = bool(issue_context.get('logs', '').strip())
+                log_indicator = " (with logs)" if has_logs else ""
             else:
                 log_msg = str(issue_context)
+                log_indicator = ""
 
-            print(f"🤖 Requesting metrics-aware AI diagnosis for: {log_msg}")
+            logger.info(f"Requesting AI diagnosis for: {log_msg}{log_indicator}")
 
             prompt = self.build_diagnosis_prompt(issue_context)
 
@@ -172,17 +197,17 @@ Fix: ...
             if not response or len(response) < 10:
                 raise ValueError("Empty AI response")
 
-            print(f"✅ AI response received ({len(response)} chars)")
+            logger.info(f"AI response received ({len(response)} chars)")
 
             diagnosis = self.parse_ai_response(response)
 
-            print(f"📋 Cause: {diagnosis['cause'][:80]}")
-            print(f"🔧 Solution: {diagnosis['solution'][:80]}")
+            logger.info(f"Cause: {diagnosis['cause'][:80]}")
+            logger.info(f"Solution: {diagnosis['solution'][:80]}")
 
             return diagnosis
 
         except Exception as e:
-            print(f"❌ Error in AI diagnosis: {e}")
+            logger.error(f"Error in AI diagnosis: {e}", exc_info=True)
 
             return {
                 "cause": "Unknown - AI error",

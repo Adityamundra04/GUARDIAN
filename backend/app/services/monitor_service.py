@@ -10,6 +10,10 @@ from backend.app.models.incident import Incident
 from backend.app.api.incidents import incidents_db
 from agent.executor import ActionExecutor
 from agent.safety_rules import SafetyRules
+from backend.app.core.logger import get_monitor_logger
+
+# Initialize logger
+logger = get_monitor_logger()
 
 
 class MonitorService:
@@ -45,7 +49,7 @@ class MonitorService:
             problematic_pods = self.k8s_service.get_problematic_pods()
             return problematic_pods if problematic_pods else []
         except Exception as e:
-            print(f"❌ Error checking system: {e}")
+            logger.error(f"Error checking system: {e}", exc_info=True)
             return []
     
     def create_incident_from_issue(self, issue: Dict[str, str]) -> Optional[Incident]:
@@ -71,7 +75,7 @@ class MonitorService:
         # Create cleaner incident message format: [namespace] pod-name → issue
         incident_message = f"[{issue['namespace']}] {issue['name']} → {issue['issue']}"
         
-        print(f"[Monitor] Issue detected: {incident_message}")
+        logger.info(f"Issue detected: {incident_message}")
         
         # Enrich issue with Prometheus metrics
         enriched_issue = self._enrich_issue_with_metrics(issue)
@@ -81,9 +85,9 @@ class MonitorService:
         try:
             # Pass the enriched issue dict with metrics for better AI context
             diagnosis = self.ai_service.diagnose_issue(enriched_issue)
-            print(f"[AI] Metrics-aware diagnosis completed")
+            logger.info("AI diagnosis completed")
         except Exception as e:
-            print(f"[AI] Diagnosis failed: {str(e)}")
+            logger.error(f"AI diagnosis failed: {str(e)}", exc_info=True)
         
         # Create incident with AI-enriched data
         incident = Incident(
@@ -101,7 +105,7 @@ class MonitorService:
         # Track this issue as active
         self.active_issues.add(pod_identifier)
         
-        print(f"[Monitor] Incident created: {incident.id}")
+        logger.info(f"Incident created: {incident.id}")
         
         # Execute remediation action if safe
         action_result = self.execute_remediation_action(issue, incident)
@@ -158,28 +162,28 @@ class MonitorService:
                 SafetyRules.record_action(pod_identifier)
                 
                 if result.get("status") == "success":
-                    print(f"[OpenClaw] Action completed successfully")
+                    logger.info("Remediation action completed successfully")
                 else:
-                    print(f"[OpenClaw] Action failed: {result.get('message')}")
+                    logger.warning(f"Remediation action failed: {result.get('message')}")
                 
                 return result
         
         except Exception as e:
-            print(f"[OpenClaw] Error executing action: {str(e)}")
+            logger.error(f"Error executing remediation action: {str(e)}", exc_info=True)
             return None
         
         return None
     
     def _enrich_issue_with_metrics(self, issue: Dict[str, str]) -> Dict[str, str]:
         """
-        Enrich issue context with Prometheus metrics.
-        Fetches CPU, memory, and restart count metrics for the problematic pod.
+        Enrich issue context with Prometheus metrics and Kubernetes logs.
+        Fetches CPU, memory, restart count metrics, and recent pod logs.
         
         Args:
             issue: Dictionary with name, namespace, and issue description
         
         Returns:
-            Enriched issue dictionary with metrics
+            Enriched issue dictionary with metrics and logs
         """
         namespace = issue.get('namespace', '')
         pod_name = issue.get('name', '')
@@ -192,7 +196,9 @@ class MonitorService:
         enriched_issue['memory_mb'] = 'N/A'
         enriched_issue['memory_bytes'] = 'N/A'
         enriched_issue['restart_count'] = 'N/A'
+        enriched_issue['logs'] = ''
         
+        # Fetch Prometheus metrics
         try:
             # Fetch CPU metrics
             cpu_metrics = self.prometheus_service.get_cpu_usage(
@@ -201,7 +207,7 @@ class MonitorService:
             )
             if cpu_metrics and len(cpu_metrics) > 0:
                 enriched_issue['cpu_usage'] = f"{cpu_metrics[0]['cpu_usage']:.4f} cores"
-                print(f"[Prometheus] CPU usage: {enriched_issue['cpu_usage']}")
+                logger.debug(f"CPU usage: {enriched_issue['cpu_usage']}")
             
             # Fetch memory metrics
             memory_metrics = self.prometheus_service.get_memory_usage(
@@ -211,7 +217,7 @@ class MonitorService:
             if memory_metrics and len(memory_metrics) > 0:
                 enriched_issue['memory_mb'] = f"{memory_metrics[0]['memory_mb']} MB"
                 enriched_issue['memory_bytes'] = memory_metrics[0]['memory_bytes']
-                print(f"[Prometheus] Memory usage: {enriched_issue['memory_mb']}")
+                logger.debug(f"Memory usage: {enriched_issue['memory_mb']}")
             
             # Fetch restart count
             restart_metrics = self.prometheus_service.get_pod_restart_count(
@@ -220,14 +226,32 @@ class MonitorService:
             )
             if restart_metrics and len(restart_metrics) > 0:
                 enriched_issue['restart_count'] = restart_metrics[0]['restart_count']
-                print(f"[Prometheus] Restart count: {enriched_issue['restart_count']}")
+                logger.debug(f"Restart count: {enriched_issue['restart_count']}")
             
-            print(f"[Prometheus] Metrics attached to AI context")
+            logger.info("Prometheus metrics attached to AI context")
         
         except Exception as e:
             # Safe fallback: continue with default metrics if Prometheus fails
-            print(f"[Prometheus] Failed to fetch metrics: {str(e)}")
-            print(f"[Prometheus] Continuing with default metrics")
+            logger.warning(f"Failed to fetch Prometheus metrics: {str(e)}")
+            logger.info("Continuing with default metrics")
+        
+        # Fetch Kubernetes pod logs
+        try:
+            logs = self.k8s_service.get_pod_logs(
+                namespace=namespace,
+                pod_name=pod_name,
+                tail_lines=50
+            )
+            if logs:
+                enriched_issue['logs'] = logs
+                logger.info("Pod logs attached to AI context")
+            else:
+                logger.info("No pod logs available, continuing without logs")
+        
+        except Exception as e:
+            # Safe fallback: continue without logs if fetch fails
+            logger.warning(f"Failed to fetch pod logs: {str(e)}")
+            logger.info("Continuing without pod logs")
         
         return enriched_issue
     
@@ -254,7 +278,7 @@ class MonitorService:
                 self.active_issues.discard(resolved)
                 # Reset retry tracker for resolved issues
                 SafetyRules.reset_tracker(resolved)
-                print(f"[Monitor] Issue resolved: {resolved}")
+                logger.info(f"Issue resolved: {resolved}")
     
     def monitor_and_create_incidents(self) -> None:
         """
@@ -276,7 +300,7 @@ class MonitorService:
             
             # Handle each detected issue
             if issues:
-                print(f"[Monitor] Found {len(issues)} issue(s) in cluster")
+                logger.info(f"Found {len(issues)} issue(s) in cluster")
                 
                 for issue in issues:
                     try:
@@ -285,11 +309,11 @@ class MonitorService:
                         
                     except Exception as e:
                         # Log error but continue processing other issues
-                        print(f"[Monitor] Error processing {issue.get('name', 'unknown')}: {str(e)}")
+                        logger.error(f"Error processing {issue.get('name', 'unknown')}: {str(e)}", exc_info=True)
                 
         except Exception as e:
             # Catch all errors to prevent monitoring loop from crashing
-            print(f"[Monitor] Error in monitoring loop: {str(e)}")
+            logger.error(f"Error in monitoring loop: {str(e)}", exc_info=True)
     
     def clear_resolved_issues(self) -> None:
         """
@@ -298,4 +322,4 @@ class MonitorService:
         """
         cleared_count = len(self.active_issues)
         self.active_issues.clear()
-        print(f"🧹 Cleared {cleared_count} tracked issue(s)")
+        logger.info(f"Cleared {cleared_count} tracked issue(s)")

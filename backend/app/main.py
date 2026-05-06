@@ -5,17 +5,17 @@ Main FastAPI application entry point
 
 import threading
 import time
-import logging
 from fastapi import FastAPI
 
 from backend.app.api import incidents
 from backend.app.services.monitor_service import MonitorService
+from backend.app.core.logger import setup_root_logger, get_logger
 
 # -------------------------------
 # Logging setup
 # -------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+setup_root_logger()
+logger = get_logger("Guardian")
 
 # -------------------------------
 # FastAPI App
@@ -43,13 +43,13 @@ def background_monitoring_loop():
     Background thread that continuously monitors Kubernetes cluster.
     Runs every 5 seconds and creates incidents automatically.
     """
-    logger.info("🚀 Guardian monitoring started...")
+    logger.info("Guardian monitoring thread started")
 
     while True:
         try:
             monitor_service.monitor_and_create_incidents()
         except Exception as e:
-            logger.error(f"❌ Monitoring error: {e}")
+            logger.error(f"Monitoring error: {e}", exc_info=True)
 
         # Always sleep (prevents CPU overuse)
         time.sleep(5)
@@ -63,12 +63,12 @@ def startup_event():
     global monitoring_started
 
     if monitoring_started:
-        logger.info("⚠️ Monitoring already running, skipping...")
+        logger.warning("Monitoring already running, skipping...")
         return
 
     monitoring_started = True
 
-    logger.info("🔧 Starting Guardian application...")
+    logger.info("Starting Guardian application...")
 
     # Start monitoring thread
     monitoring_thread = threading.Thread(
@@ -77,7 +77,7 @@ def startup_event():
     )
     monitoring_thread.start()
 
-    logger.info("✅ Background monitoring thread started")
+    logger.info("Background monitoring thread started successfully")
 
 
 # -------------------------------
