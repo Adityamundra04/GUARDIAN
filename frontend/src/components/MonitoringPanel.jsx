@@ -91,7 +91,8 @@ const MonitoringPanel = ({ systemStatus, backendConnected = true }) => {
 };
 
 const ServiceStatus = ({ name, status, description, icon }) => {
-  const isOnline = status === 'online';
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const isOnline = ['online', 'ok', 'healthy'].includes(normalizedStatus);
 
   return (
     <motion.div

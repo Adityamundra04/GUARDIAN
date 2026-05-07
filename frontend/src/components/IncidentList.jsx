@@ -2,6 +2,8 @@ import { motion } from 'framer-motion';
 import IncidentCard from './IncidentCard';
 
 const IncidentList = ({ incidents, loading }) => {
+  const safeIncidents = Array.isArray(incidents) ? incidents : [];
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -12,7 +14,7 @@ const IncidentList = ({ incidents, loading }) => {
     );
   }
 
-  if (incidents.length === 0) {
+  if (safeIncidents.length === 0) {
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
@@ -36,8 +38,8 @@ const IncidentList = ({ incidents, loading }) => {
 
   return (
     <div className="space-y-4">
-      {incidents.map((incident, index) => (
-        <IncidentCard key={incident.id} incident={incident} index={index} />
+      {safeIncidents.map((incident, index) => (
+        <IncidentCard key={incident.id || index} incident={incident} index={index} />
       ))}
     </div>
   );

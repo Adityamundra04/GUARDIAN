@@ -2,7 +2,7 @@
 Guardian - AI-powered Kubernetes incident assistant
 Main FastAPI application entry point
 """
-
+from fastapi.middleware.cors import CORSMiddleware
 import threading
 import time
 from fastapi import FastAPI

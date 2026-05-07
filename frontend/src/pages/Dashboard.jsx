@@ -19,6 +19,11 @@ const Dashboard = () => {
     remediation: 'offline',
   });
 
+  const normalizeHealthStatus = (status) => {
+    const normalized = String(status || '').trim().toLowerCase();
+    return ['online', 'ok', 'healthy'].includes(normalized) ? 'online' : 'offline';
+  };
+
   // Use ref to track if component is mounted
   const isMounted = useRef(true);
 
@@ -28,11 +33,12 @@ const Dashboard = () => {
       if (isInitialLoad) {
         setLoading(true);
       }
-      
+
       const data = await api.getIncidents();
-      
+      const incidentList = Array.isArray(data) ? data : [];
+
       if (isMounted.current) {
-        setIncidents(data);
+        setIncidents(incidentList);
         setError(null);
         setBackendConnected(true);
         setLastUpdate(new Date());
@@ -41,10 +47,11 @@ const Dashboard = () => {
       console.error('Failed to fetch incidents:', err);
       if (isMounted.current) {
         setError('Failed to connect to Guardian backend. Please ensure the backend is running on http://127.0.0.1:8000');
+        setIncidents([]);
         setBackendConnected(false);
       }
     } finally {
-      if (isMounted.current && isInitialLoad) {
+      if (isMounted.current) {
         setLoading(false);
       }
     }
@@ -54,16 +61,22 @@ const Dashboard = () => {
   const checkHealth = useCallback(async () => {
     try {
       const healthData = await api.getHealth();
-      
+      const normalizedStatus = normalizeHealthStatus(healthData?.status);
+
       if (isMounted.current) {
-        // If health check succeeds, assume all systems are online
+        const online = normalizedStatus === 'online';
         setSystemStatus({
-          kubernetes: 'online',
-          prometheus: 'online',
-          aiEngine: 'online',
-          remediation: 'online',
+          kubernetes: online ? 'online' : 'offline',
+          prometheus: online ? 'online' : 'offline',
+          aiEngine: online ? 'online' : 'offline',
+          remediation: online ? 'online' : 'offline',
         });
-        setBackendConnected(true);
+        setBackendConnected(online);
+        if (!online) {
+          setError('Guardian health check returned offline status.');
+        } else {
+          setError(null);
+        }
       }
     } catch (err) {
       console.error('Health check failed:', err);
@@ -75,6 +88,7 @@ const Dashboard = () => {
           remediation: 'offline',
         });
         setBackendConnected(false);
+        setError('Guardian health check failed.');
       }
     }
   }, []);
@@ -85,9 +99,11 @@ const Dashboard = () => {
       await api.getRoot();
       console.log('Backend connection successful');
       setBackendConnected(true);
+      setError(null);
     } catch (err) {
       console.error('Backend connection failed:', err);
       setBackendConnected(false);
+      setError('Failed to connect to Guardian backend.');
     }
   }, []);
 

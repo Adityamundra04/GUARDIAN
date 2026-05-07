@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: demo-crashloop-failure
+  namespace: default
+  labels:
+    app: guardian-demo
+    test: crashloop
+spec:
+  containers:
+  - name: crashloop-container
+    image: busybox:latest
+    command: ["sh", "-c", "echo 'Starting application...'; sleep 2; echo 'Application crashed!'; exit 1"]
+    resources:
+      requests:
+        memory: "32Mi"
+        cpu: "50m"
+      limits:
+        memory: "64Mi"
+        cpu: "100m"
+  restartPolicy: Always

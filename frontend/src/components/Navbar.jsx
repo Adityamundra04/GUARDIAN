@@ -55,7 +55,8 @@ const Navbar = ({ systemStatus, backendConnected = true }) => {
 };
 
 const StatusIndicator = ({ label, status }) => {
-  const isOnline = status === 'online';
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const isOnline = ['online', 'ok', 'healthy'].includes(normalizedStatus);
   
   return (
     <div className="flex items-center space-x-2">
